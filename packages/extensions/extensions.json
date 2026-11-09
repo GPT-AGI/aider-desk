@@ -233,7 +233,7 @@
         "linux",
         "macos"
       ],
-      "installCount": 36
+      "installCount": 37
     },
     {
       "id": "redact-secrets",
@@ -400,7 +400,7 @@
         "linux",
         "macos"
       ],
-      "installCount": 46
+      "installCount": 47
     },
     {
       "id": "searxng-search",
@@ -594,7 +594,7 @@
         "agents",
         "example"
       ],
-      "installCount": 76
+      "installCount": 77
     },
     {
       "id": "wigolo",
@@ -695,7 +695,7 @@
         "ui",
         "commands"
       ],
-      "installCount": 22
+      "installCount": 23
     }
   ]
 }
