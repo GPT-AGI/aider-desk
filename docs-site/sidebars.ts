@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
         "getting-started/quick-start",
         "getting-started/managing-projects",
         "getting-started/development",
+        "getting-started/source-code-map",
       ],
     },
     {
