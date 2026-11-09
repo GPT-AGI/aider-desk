@@ -73,7 +73,10 @@ describe('GitManager - commitChanges cancellation', () => {
     expect(execWithShellPath).toHaveBeenCalledWith(['git', 'ls-files', '-z', 'file-a.ts'], expect.objectContaining({ killSignal: 'SIGINT' }));
     expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-a.ts'], expect.anything());
     expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-b.ts'], expect.anything());
-    expect(execWithShellPath).toHaveBeenCalledWith(['git', 'commit', '-m', 'partial commit', 'file-a.ts'], expect.objectContaining({ killSignal: 'SIGINT' }));
+    expect(execWithShellPath).toHaveBeenCalledWith(
+      ['git', 'commit', '-m', 'partial commit', '--only', '--', 'file-a.ts'],
+      expect.objectContaining({ killSignal: 'SIGINT' }),
+    );
   });
 
   it('should stage only untracked selected files when filePaths is provided', async () => {
@@ -84,16 +87,58 @@ describe('GitManager - commitChanges cancellation', () => {
     expect(committed).toBe(true);
     expect(execWithShellPath).toHaveBeenCalledWith(['git', 'add', '--', 'file-a.ts'], expect.objectContaining({ killSignal: 'SIGINT' }));
     expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-b.ts'], expect.anything());
-    expect(execWithShellPath).toHaveBeenCalledWith(['git', 'commit', '-m', 'partial commit', 'file-a.ts'], expect.objectContaining({ killSignal: 'SIGINT' }));
+    expect(execWithShellPath).toHaveBeenCalledWith(
+      ['git', 'commit', '-m', 'partial commit', '--only', '--', 'file-a.ts'],
+      expect.objectContaining({ killSignal: 'SIGINT' }),
+    );
   });
 
-  it('should not use pathspec commit when amending an empty message', async () => {
-    (execWithShellPath as Mock).mockResolvedValue({ stdout: '', stderr: '' });
+  it.each(['', 'updated message'])('should amend only selected files with message %j', async (message) => {
+    (execWithShellPath as Mock).mockResolvedValue({ stdout: 'file-a.ts\0', stderr: '' });
 
-    const committed = await gitManager.commitChanges(worktreePath, '', true, false, ['file-a.ts']);
+    const committed = await gitManager.commitChanges(worktreePath, message, true, false, ['file-a.ts']);
 
     expect(committed).toBe(true);
-    expect(execWithShellPath).toHaveBeenCalledWith(['git', 'commit', '--amend', '--no-edit'], expect.objectContaining({ killSignal: 'SIGINT' }));
+    expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-a.ts'], expect.anything());
+    expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-b.ts'], expect.anything());
+    expect(execWithShellPath).toHaveBeenCalledWith(
+      ['git', 'commit', '--amend', ...(message ? ['-m', message] : ['--no-edit']), '--only', '--', 'file-a.ts'],
+      expect.objectContaining({ killSignal: 'SIGINT' }),
+    );
+  });
+
+  it('should use --only for amend even when all updated files are selected', async () => {
+    (execWithShellPath as Mock).mockResolvedValue({ stdout: 'file-a.ts\0file-b.ts\0', stderr: '' });
+
+    await gitManager.commitChanges(worktreePath, '', true, true, ['file-a.ts', 'file-b.ts']);
+
+    expect(execWithShellPath).toHaveBeenCalledWith(
+      ['git', 'commit', '--amend', '--no-verify', '--no-edit', '--only', '--', 'file-a.ts', 'file-b.ts'],
+      expect.anything(),
+    );
+  });
+
+  it('should stage an untracked selected file before amending', async () => {
+    (execWithShellPath as Mock).mockResolvedValue({ stdout: '', stderr: '' });
+
+    await gitManager.commitChanges(worktreePath, '', true, false, ['file-a.ts']);
+
+    expect(execWithShellPath).toHaveBeenCalledWith(['git', 'add', '--', 'file-a.ts'], expect.anything());
+    expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-b.ts'], expect.anything());
+    expect(execWithShellPath).toHaveBeenCalledWith(['git', 'commit', '--amend', '--no-edit', '--only', '--', 'file-a.ts'], expect.anything());
+  });
+
+  it.each(['', 'message only'])('should exclude staged changes when amending with no selected files and message %j', async (message) => {
+    (execWithShellPath as Mock).mockResolvedValue({ stdout: '', stderr: '' });
+
+    await gitManager.commitChanges(worktreePath, message, true, false, []);
+
+    expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-a.ts'], expect.anything());
+    expect(execWithShellPath).not.toHaveBeenCalledWith(['git', 'add', '--', 'file-b.ts'], expect.anything());
+    expect(execWithShellPath).toHaveBeenCalledWith(
+      ['git', 'commit', '--amend', ...(message ? ['-m', message] : ['--no-edit']), '--only', '--'],
+      expect.anything(),
+    );
   });
 
   it('should retry staging with -A -f when git add fails for ignored files', async () => {

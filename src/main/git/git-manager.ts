@@ -3419,16 +3419,12 @@ export class GitManager {
         return true;
       }
 
-      // Stage updated files before committing. With a file selection the commit runs in the
-      // --only pathspec form (see below), which takes tracked files directly from the working
-      // tree — so staging is only needed for files not yet tracked (untracked, incl. ignored ones).
-      // Without a selection (full commit / amend) everything must be staged, because a plain
-      // `git commit` only takes what is in the index.
+      const usePathspecCommit = !!filePaths && (amend || selectedFiles.length < updatedFiles.length);
+
+      // Pathspec commits take tracked files directly from the working tree;
+      // only untracked files need staging. Plain index commits need everything staged.
       if (selectedFiles.length > 0) {
-        // A selection that covers all updated files is effectively a full commit — keep the
-        // plain index commit (shorter command, everything is committed anyway)
         let filesToStage = selectedFiles;
-        const usePathspecCommit = !amend && !!filePaths && selectedFiles.length < updatedFiles.length;
         if (usePathspecCommit) {
           const { stdout: trackedFilesOutput } = await execWithShellPath(['git', 'ls-files', '-z', ...selectedFiles.map((file) => file.path)], options);
           const trackedFiles = new Set(trackedFilesOutput.split('\0').filter(Boolean));
@@ -3489,8 +3485,8 @@ export class GitManager {
       // When a file selection is provided, commit only those paths (--only pathspec form).
       // Plain `git commit` would also include any other files already staged in the index,
       // which breaks partial commits when edited files are left staged.
-      if (!amend && filePaths && selectedFiles.length > 0 && selectedFiles.length < updatedFiles.length) {
-        commitCommand.push(...selectedFiles.map((file) => file.path));
+      if (usePathspecCommit) {
+        commitCommand.push('--only', '--', ...selectedFiles.map((file) => file.path));
       }
       await execWithShellPath(commitCommand, options);
 
