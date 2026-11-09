@@ -1,5 +1,9 @@
 # Changelog
 
+## [UNRELEASED]
+
+- improved database write performance by enabling SQLite WAL mode to reduce UI freezes under concurrent agents
+
 ## [0.91.0]
 
 - fixed OS command injection via commit messages and file paths in git operations

@@ -21,6 +21,15 @@ export class DataManager {
     // Initialize the database connection.
     // The verbose option logs all SQL statements to the console, which is useful for debugging.
     this.db = new DatabaseSync(DB_FILE_PATH);
+
+    // WAL mode keeps readers from blocking the single synchronous writer and avoids the
+    // per-commit rollback-journal create/fsync/delete cycle. synchronous=NORMAL drops the
+    // per-commit fsync (checkpoints still fsync), which is safe in WAL: committed
+    // transactions survive application crashes and the database cannot corrupt; only the
+    // last few transactions may be lost on OS crash/power loss, which the agent-execution
+    // journal's checkpoint/replay recovery already tolerates.
+    this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA synchronous = NORMAL');
   }
 
   public init() {
@@ -85,16 +94,6 @@ export class DataManager {
     }
   }
 
-  /**
-   * Saves a message to the database.
-   * @param id The unique identifier for the message.
-   * @param type The type of the message ('tool' or 'assistant').
-   * @param project The project's base directory.
-   * @param taskId The task's identifier.
-   * @param model The model used for the message.
-   * @param usageReport The usage report data.
-   * @param content The content of the message.
-   */
   public getAgentExecutions(project: string, taskId: string): string[] {
     const rows = this.db.prepare('SELECT state_json FROM agent_execution_journal WHERE project = ? AND task_id = ?').all(project, taskId) as {
       state_json: string;
@@ -116,6 +115,16 @@ export class DataManager {
     this.db.prepare('DELETE FROM agent_execution_journal WHERE project = ? AND task_id = ? AND prompt_context_id = ?').run(project, taskId, promptContextId);
   }
 
+  /**
+   * Saves a message to the database.
+   * @param id The unique identifier for the message.
+   * @param type The type of the message ('tool' or 'assistant').
+   * @param project The project's base directory.
+   * @param taskId The task's identifier.
+   * @param model The model used for the message.
+   * @param usageReport The usage report data.
+   * @param content The content of the message.
+   */
   public saveMessage(
     id: string,
     type: 'tool' | 'assistant',
