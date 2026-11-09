@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { UsageReportData, UsageDataRow } from '@common/types';
 
 import logger from '@/logger';
-import { DB_FILE_PATH } from '@/constants';
+import { DB_FILE_PATH, DB_JOURNAL_MODE, DB_SYNCHRONOUS } from '@/constants';
 import { isDiagnosticsEnabled, recordDbWrite } from '@/diagnostics';
 
 /**
@@ -30,8 +30,13 @@ export class DataManager {
     // transactions survive application crashes and the database cannot corrupt; only the
     // last few transactions may be lost on OS crash/power loss, which the agent-execution
     // journal's checkpoint/replay recovery already tolerates.
-    this.db.exec('PRAGMA journal_mode = WAL');
-    this.db.exec('PRAGMA synchronous = NORMAL');
+    //
+    // Both pragmas are overridable (AIDER_DESK_DB_JOURNAL_MODE / AIDER_DESK_DB_SYNCHRONOUS)
+    // for diagnostics only, e.g. reverting to DELETE/FULL to approximate slow-I/O platforms.
+    // The values are validated against an allowlist in constants before reaching here.
+    this.db.exec(`PRAGMA journal_mode = ${DB_JOURNAL_MODE}`);
+    this.db.exec(`PRAGMA synchronous = ${DB_SYNCHRONOUS}`);
+    logger.info('Database pragmas applied', { journalMode: DB_JOURNAL_MODE, synchronous: DB_SYNCHRONOUS });
   }
 
   public init() {
