@@ -105,7 +105,7 @@
       "capabilities": [
         "modes"
       ],
-      "installCount": 125
+      "installCount": 126
     },
     {
       "id": "protected-paths",
@@ -607,7 +607,7 @@
         "tools",
         "search"
       ],
-      "installCount": 76
+      "installCount": 77
     },
     {
       "id": "destructive-command-guard",
@@ -644,7 +644,7 @@
       "capabilities": [
         "ui"
       ],
-      "installCount": 178
+      "installCount": 179
     },
     {
       "id": "task-scheduler",
