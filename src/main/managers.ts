@@ -22,6 +22,7 @@ import { NetworkManager } from '@/network-manager';
 import { EventsHandler } from '@/events-handler';
 import { PromptsManager } from '@/prompts';
 import { PythonDependenciesInstaller } from '@/python-dependencies-installer';
+import { startEventLoopMonitor, stopEventLoopMonitor } from '@/diagnostics';
 
 export interface ManagersResult {
   eventsHandler: EventsHandler;
@@ -76,6 +77,9 @@ export const initManagers = async (store: Store, windowManager?: WindowManager):
   // Initialize data manager
   const dataManager = new DataManager();
   dataManager.init();
+
+  // Opt-in diagnostics (AIDER_DESK_DIAGNOSTICS=true); no-op otherwise
+  startEventLoopMonitor();
 
   // Initialize memory manager (non-blocking - heavy operation with lazy loading)
   const memoryManager = new MemoryManager(store);
@@ -210,6 +214,7 @@ export const initManagers = async (store: Store, windowManager?: WindowManager):
       }
 
       dataManager.close();
+      stopEventLoopMonitor();
     } catch (error) {
       logger.error('Error during cleanup:', {
         error: error instanceof Error ? error.message : String(error),

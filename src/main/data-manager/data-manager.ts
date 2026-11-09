@@ -1,9 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
+import { performance } from 'node:perf_hooks';
 
 import { UsageReportData, UsageDataRow } from '@common/types';
 
 import logger from '@/logger';
 import { DB_FILE_PATH } from '@/constants';
+import { isDiagnosticsEnabled, recordDbWrite } from '@/diagnostics';
 
 /**
  * Manages the application's database connection and structure.
@@ -102,6 +104,7 @@ export class DataManager {
   }
 
   public saveAgentExecution(project: string, taskId: string, promptContextId: string, state: string): void {
+    const start = isDiagnosticsEnabled() ? performance.now() : 0;
     this.db
       .prepare(
         `INSERT INTO agent_execution_journal (project, task_id, prompt_context_id, state_json)
@@ -109,6 +112,9 @@ export class DataManager {
       DO UPDATE SET state_json = excluded.state_json, updated_at = CURRENT_TIMESTAMP`,
       )
       .run(project, taskId, promptContextId, state);
+    if (start) {
+      recordDbWrite('agent_execution', state.length, performance.now() - start);
+    }
   }
 
   public deleteAgentExecution(project: string, taskId: string, promptContextId: string): void {
@@ -154,6 +160,8 @@ export class DataManager {
         message_content_json: content,
       });
 
+      const contentJson = JSON.stringify(content);
+      const start = isDiagnosticsEnabled() ? performance.now() : 0;
       this.db
         .prepare(sql)
         .run(
@@ -167,8 +175,11 @@ export class DataManager {
           usageReport?.cacheWriteTokens ?? null,
           usageReport?.cacheReadTokens ?? null,
           usageReport?.messageCost ?? null,
-          JSON.stringify(content),
+          contentJson,
         );
+      if (start) {
+        recordDbWrite('message', contentJson.length, performance.now() - start);
+      }
     } catch (error) {
       logger.error('Failed to save message:', error);
     }

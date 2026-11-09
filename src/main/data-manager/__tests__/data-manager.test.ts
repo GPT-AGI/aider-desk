@@ -16,6 +16,7 @@ vi.mock('@/logger', () => ({
 
 vi.mock('@/constants', () => ({
   DB_FILE_PATH: ':memory:',
+  DIAGNOSTICS_MODE: false,
 }));
 
 const getDb = (manager: DataManager): DatabaseSync => (manager as unknown as { db: DatabaseSync }).db;
