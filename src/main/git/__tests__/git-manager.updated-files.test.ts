@@ -1,10 +1,12 @@
-import { lstatSync } from 'fs';
+import { existsSync, lstatSync } from 'fs';
 
+import { UpdatedFilesGroupMode } from '@common/types';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { GitManager } from '../git-manager';
 
 import { execWithShellPath } from '@/utils';
+import logger from '@/logger';
 
 vi.mock('@/logger', () => ({
   default: {
@@ -440,5 +442,65 @@ describe('GitManager - getUpdatedFiles no HEAD (no commits)', () => {
     expect(result[0].path).toBe('src/app.ts');
     expect(result[0].additions).toBe(2);
     expect(result[0].diff).toBe('');
+  });
+});
+
+describe('GitManager - updated files process failures', () => {
+  const testPath = '/test/worktree';
+  let gitManager: GitManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    gitManager = new GitManager();
+    vi.spyOn(gitManager, 'isGitRepository').mockResolvedValue(true);
+    vi.mocked(existsSync).mockReturnValue(false);
+  });
+
+  it.each(['git rev-parse HEAD', 'git diff --numstat -z -M HEAD', 'git ls-files --others --exclude-standard -z', 'git diff --name-only --diff-filter=U'])(
+    'should stop refreshing when the directory disappears during %s',
+    async (failedCommand) => {
+      const commands: string[] = [];
+      vi.mocked(execWithShellPath).mockImplementation(async (input) => {
+        const command = Array.isArray(input) ? input.join(' ') : input;
+        commands.push(command);
+        if (command === failedCommand) {
+          throw Object.assign(new Error('spawn /bin/sh ENOENT'), { code: 'ENOENT' });
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      expect(await gitManager.getUpdatedFiles(testPath)).toEqual([]);
+      expect(commands.at(-1)).toBe(failedCommand);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith('Skipping updated files refresh: working directory no longer exists', { worktreePath: testPath });
+    },
+  );
+
+  it.each([UpdatedFilesGroupMode.Grouped, UpdatedFilesGroupMode.Flat])('should stop worktree refresh on launch failure in %s mode', async (groupMode) => {
+    vi.mocked(execWithShellPath).mockRejectedValue(Object.assign(new Error('spawn /bin/sh ENOENT'), { code: 'ENOENT' }));
+
+    expect(await gitManager.getUpdatedFiles(testPath, 'worktree', 'main', groupMode)).toEqual([]);
+    expect(execWithShellPath).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should stop if the directory disappears during the empty-tree diff', async () => {
+    vi.mocked(execWithShellPath)
+      .mockRejectedValueOnce(Object.assign(new Error('HEAD not found'), { code: 128 }))
+      .mockRejectedValueOnce(Object.assign(new Error('spawn /bin/sh ENOENT'), { code: 'ENOENT' }));
+
+    expect(await gitManager.getUpdatedFiles(testPath)).toEqual([]);
+    expect(execWithShellPath).toHaveBeenCalledTimes(2);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it.each(['ENOENT', 'EACCES'])('should warn once for %s when the working directory still exists', async (code) => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    const error = Object.assign(new Error(`spawn /bin/sh ${code}`), { code });
+    vi.mocked(execWithShellPath).mockRejectedValue(error);
+
+    expect(await gitManager.getUpdatedFiles(testPath)).toEqual([]);
+    expect(execWithShellPath).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('Failed to get updated files:', { worktreePath: testPath, error });
   });
 });

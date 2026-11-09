@@ -4,6 +4,7 @@
 
 - improved database write performance by enabling SQLite WAL mode to reduce UI freezes under concurrent agents
 - fixed amend commits including unselected staged changes instead of respecting the selected files
+- fixed misleading Git warnings when worktree directories were removed during file refresh
 
 ## [0.91.0]
 

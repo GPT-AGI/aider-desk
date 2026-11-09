@@ -2759,8 +2759,18 @@ export class GitManager {
       const filesWithUntrackedFiles = await this.includeUntrackedFiles(worktreePath, files);
       return await this.markConflictingFiles(worktreePath, filesWithUntrackedFiles);
     } catch (error) {
-      logger.warn('Failed to get updated files:', error);
+      if (!existsSync(worktreePath)) {
+        logger.debug('Skipping updated files refresh: working directory no longer exists', { worktreePath });
+      } else {
+        logger.warn('Failed to get updated files:', { worktreePath, error });
+      }
       return [];
+    }
+  }
+
+  private rethrowGitProcessError(error: unknown): void {
+    if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
+      throw error;
     }
   }
 
@@ -2786,6 +2796,7 @@ export class GitManager {
 
       return updatedFiles;
     } catch (error) {
+      this.rethrowGitProcessError(error);
       logger.warn('Failed to get untracked files:', error);
       return files;
     }
@@ -2895,6 +2906,7 @@ export class GitManager {
         commits.push({ hash, message });
       }
     } catch (logError) {
+      this.rethrowGitProcessError(logError);
       logger.warn('Failed to get commit list for worktree updated files:', logError);
     }
 
@@ -2908,6 +2920,7 @@ export class GitManager {
           files.push({ ...file, commitHash: commit.hash, commitMessage: commit.message });
         }
       } catch (commitError) {
+        this.rethrowGitProcessError(commitError);
         logger.warn(`Failed to get files for commit ${commit.hash}:`, commitError);
       }
     }
@@ -2916,7 +2929,8 @@ export class GitManager {
     try {
       // Check if HEAD exists (no commits yet in worktree)
       await execWithShellPath('git rev-parse HEAD', { cwd: worktreePath });
-    } catch {
+    } catch (error) {
+      this.rethrowGitProcessError(error);
       return files.concat(await this.getNoHeadUpdatedFiles(worktreePath));
     }
 
@@ -2927,6 +2941,7 @@ export class GitManager {
 
       files.push(...this.parseUpdatedFileNumstat(worktreePath, uncommittedNumstat));
     } catch (uncommittedError) {
+      this.rethrowGitProcessError(uncommittedError);
       logger.warn('Failed to get uncommitted changes:', uncommittedError);
     }
 
@@ -2948,7 +2963,8 @@ export class GitManager {
       if (mergeBase.trim()) {
         base = mergeBase.trim();
       }
-    } catch {
+    } catch (error) {
+      this.rethrowGitProcessError(error);
       // No HEAD or unrelated histories: fall back to mainBranch
     }
 
@@ -2961,6 +2977,7 @@ export class GitManager {
 
       files.push(...this.parseUpdatedFileNumstat(worktreePath, numstatOutput));
     } catch (baseDiffError) {
+      this.rethrowGitProcessError(baseDiffError);
       logger.warn('Failed to get base diff for worktree:', baseDiffError);
     }
 
@@ -2973,7 +2990,8 @@ export class GitManager {
   private async getNonWorktreeUpdatedFiles(worktreePath: string): Promise<UpdatedFile[]> {
     try {
       await execWithShellPath('git rev-parse HEAD', { cwd: worktreePath });
-    } catch {
+    } catch (error) {
+      this.rethrowGitProcessError(error);
       return await this.getNoHeadUpdatedFiles(worktreePath);
     }
 
@@ -3002,6 +3020,7 @@ export class GitManager {
 
       files.push(...this.parseUpdatedFileNumstat(worktreePath, stdout));
     } catch (error) {
+      this.rethrowGitProcessError(error);
       logger.warn('Failed to get updated files for repo with no commits:', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -3203,7 +3222,8 @@ export class GitManager {
       }
 
       return files.map((f) => (unmergedFiles.has(f.path) ? { ...f, hasConflicts: true } : f));
-    } catch {
+    } catch (error) {
+      this.rethrowGitProcessError(error);
       return files;
     }
   }
